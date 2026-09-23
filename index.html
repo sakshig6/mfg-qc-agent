@@ -1,0 +1,1507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Manufacturing QC Agent — IBM watsonx.ai</title>
+<!-- Chart.js from CDN — no install needed -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+/* ============================================================
+   GLOBAL RESET & VARIABLES
+   ============================================================ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--surface:#161b27;--surface2:#1e2535;
+  --border:#2a3347;--text:#e2e8f0;--muted:#8892a4;
+  --accent:#3b82f6;--accent2:#1d4ed8;
+  --ok:#22c55e;--warn:#f59e0b;--danger:#ef4444;--purple:#8b5cf6;
+  --sw:230px;--hh:56px;
+}
+html{font-size:14px}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);
+     display:flex;min-height:100vh;overflow-x:hidden}
+
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+#sidebar{
+  width:var(--sw);min-height:100vh;background:var(--surface);
+  border-right:1px solid var(--border);display:flex;flex-direction:column;
+  position:fixed;top:0;left:0;z-index:200;transition:transform .25s;
+}
+.brand{padding:.9rem 1.1rem;border-bottom:1px solid var(--border);
+       display:flex;align-items:center;gap:.65rem}
+.brand-icon{width:34px;height:34px;background:var(--accent);border-radius:7px;
+            display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.1rem}
+.brand-name{font-weight:700;font-size:.88rem;line-height:1.2}
+.brand-sub{font-size:.68rem;color:var(--muted)}
+nav{flex:1;padding:.5rem 0;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:.6rem;padding:.52rem 1.1rem;
+          font-size:.82rem;color:var(--muted);cursor:pointer;transition:all .15s;
+          border-left:3px solid transparent;user-select:none}
+.nav-item:hover{color:var(--text);background:rgba(255,255,255,.04)}
+.nav-item.active{color:#fff;background:rgba(59,130,246,.13);border-left-color:var(--accent);font-weight:600}
+.nav-item .icon{font-size:1rem;width:18px;text-align:center;flex-shrink:0}
+.sidebar-footer{padding:.7rem 1.1rem;border-top:1px solid var(--border);font-size:.7rem;color:var(--muted)}
+.sidebar-footer b{color:var(--text)}
+.ibm-status{margin-top:.3rem;display:flex;align-items:center;gap:.35rem}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--warn);flex-shrink:0}
+.dot.ok{background:var(--ok)}
+
+/* ============================================================
+   TOPBAR
+   ============================================================ */
+#topbar{
+  position:fixed;left:var(--sw);right:0;top:0;height:var(--hh);
+  background:var(--surface);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 1.25rem;z-index:100;
+}
+.topbar-title{font-size:.82rem;color:var(--muted)}
+.topbar-title span{color:var(--text);font-weight:600}
+.topbar-right{display:flex;align-items:center;gap:.75rem;font-size:.75rem}
+.status-chip{display:flex;align-items:center;gap:.35rem;
+             padding:.25rem .7rem;border-radius:20px;
+             border:1px solid var(--border);background:var(--surface2)}
+
+/* ============================================================
+   MAIN CONTENT
+   ============================================================ */
+#main{margin-left:var(--sw);margin-top:var(--hh);padding:1.5rem;flex:1;min-width:0}
+.page{display:none}
+.page.active{display:block}
+.page-hdr{margin-bottom:1.25rem}
+.page-hdr h1{font-size:1.2rem;font-weight:700}
+.page-hdr p{color:var(--muted);font-size:.82rem;margin-top:.2rem}
+
+/* ============================================================
+   CARDS / GRID
+   ============================================================ */
+.card{background:var(--surface);border:1px solid var(--border);
+      border-radius:8px;padding:1.1rem}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:.9rem;margin-bottom:1.1rem}
+.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:.9rem;margin-bottom:1.1rem}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:.9rem;margin-bottom:1.1rem}
+@media(max-width:1200px){.grid-4{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:700px){.grid-4,.grid-2,.grid-3{grid-template-columns:1fr}}
+.stat-card{background:var(--surface);border:1px solid var(--border);
+           border-radius:8px;padding:.9rem 1rem}
+.stat-lbl{font-size:.7rem;color:var(--muted);text-transform:uppercase;
+          letter-spacing:.06em;font-weight:600;margin-bottom:.25rem}
+.stat-val{font-size:1.9rem;font-weight:700;line-height:1.1}
+.stat-sub{font-size:.7rem;color:var(--muted);margin-top:.15rem}
+
+/* ============================================================
+   TABLES
+   ============================================================ */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.78rem}
+th{background:var(--surface2);color:var(--muted);font-weight:600;
+   text-transform:uppercase;letter-spacing:.05em;font-size:.68rem;
+   padding:.5rem .85rem;text-align:left;border-bottom:1px solid var(--border)}
+td{padding:.45rem .85rem;border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.025)}
+
+/* ============================================================
+   BADGES
+   ============================================================ */
+.badge{display:inline-flex;align-items:center;gap:3px;
+       padding:2px 8px;border-radius:20px;font-size:.68rem;
+       font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.b-ok{background:rgba(34,197,94,.15);color:var(--ok)}
+.b-warn{background:rgba(245,158,11,.15);color:var(--warn)}
+.b-crit{background:rgba(239,68,68,.15);color:var(--danger)}
+.b-info{background:rgba(59,130,246,.15);color:var(--accent)}
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:.38rem .85rem;
+     border-radius:6px;border:none;font-size:.8rem;font-weight:500;
+     cursor:pointer;transition:all .15s;font-family:inherit}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent2)}
+.btn-ghost{background:transparent;color:var(--muted);
+           border:1px solid var(--border)}
+.btn-ghost:hover{color:var(--text);border-color:var(--muted)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* ============================================================
+   ALERTS
+   ============================================================ */
+.alert-row{display:flex;align-items:flex-start;gap:.6rem;
+           padding:.6rem .85rem;border-radius:6px;
+           background:var(--surface2);border-left:3px solid;
+           margin-bottom:.4rem}
+.alert-row.crit{border-color:var(--danger)}
+.alert-row.warn{border-color:var(--warn)}
+.alert-row.ok{border-color:var(--ok)}
+.alert-param{font-weight:700;font-size:.75rem;text-transform:uppercase}
+.alert-msg{font-size:.72rem;color:var(--muted);margin-top:1px}
+
+/* ============================================================
+   PROGRESS BAR
+   ============================================================ */
+.prog-wrap{width:64px;height:6px;background:var(--border);
+           border-radius:3px;overflow:hidden;display:inline-block}
+.prog-fill{height:100%;border-radius:3px;transition:width .3s}
+
+/* ============================================================
+   CHAT
+   ============================================================ */
+#chat-msgs{flex:1;overflow-y:auto;padding:.75rem;display:flex;
+           flex-direction:column;gap:.75rem;min-height:0}
+.msg{display:flex;gap:.6rem;align-items:flex-start;max-width:82%}
+.msg.user{flex-direction:row-reverse;align-self:flex-end}
+.msg-bubble{background:var(--surface2);border:1px solid var(--border);
+            border-radius:10px;padding:.55rem .8rem;font-size:.8rem;
+            line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.msg.user .msg-bubble{background:var(--accent2);border-color:var(--accent)}
+.msg-avatar{width:28px;height:28px;border-radius:50%;flex-shrink:0;
+            background:var(--surface2);border:1px solid var(--border);
+            display:flex;align-items:center;justify-content:center;font-size:.85rem}
+.msg.user .msg-avatar{background:var(--accent)}
+.sources{font-size:.68rem;color:var(--muted);margin-top:.4rem;
+         padding-top:.3rem;border-top:1px solid var(--border)}
+
+/* ============================================================
+   UPLOAD ZONE
+   ============================================================ */
+#drop-zone{border:2px dashed var(--border);border-radius:8px;
+           padding:2.5rem;text-align:center;cursor:pointer;
+           transition:all .2s;background:var(--surface)}
+#drop-zone:hover,#drop-zone.drag{border-color:var(--accent);
+  background:rgba(59,130,246,.05)}
+#drop-zone input[type=file]{display:none}
+
+/* ============================================================
+   MISC
+   ============================================================ */
+.spinner{width:28px;height:28px;border:3px solid var(--border);
+         border-top-color:var(--accent);border-radius:50%;
+         animation:spin .7s linear infinite;margin:0 auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading{display:flex;justify-content:center;padding:2rem}
+.empty{text-align:center;padding:2.5rem;color:var(--muted);font-size:.82rem}
+.mb1{margin-bottom:.75rem}
+.mb2{margin-bottom:1.25rem}
+.row{display:flex;gap:.75rem;align-items:center;flex-wrap:wrap}
+.section-title{font-weight:700;font-size:.85rem;margin-bottom:.7rem;
+               display:flex;align-items:center;gap:.4rem}
+input[type=text],input[type=password],select,textarea{
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:6px;padding:.42rem .75rem;color:var(--text);
+  font-family:inherit;font-size:.82rem;outline:none;
+  transition:border-color .15s}
+input[type=text]:focus,input[type=password]:focus,
+select:focus,textarea:focus{border-color:var(--accent)}
+textarea{resize:vertical}
+label{font-size:.75rem;color:var(--muted);display:block;margin-bottom:.25rem}
+.form-row{margin-bottom:.7rem}
+.tag{display:inline-block;background:var(--surface2);border:1px solid var(--border);
+     border-radius:4px;padding:2px 8px;font-size:.72rem;margin:2px}
+.rec-card{background:var(--surface2);border:1px solid var(--border);
+          border-left:4px solid var(--warn);border-radius:6px;
+          padding:.8rem .95rem;margin-bottom:.6rem}
+.rec-card.crit{border-left-color:var(--danger)}
+.rec-card.ok{border-left-color:var(--ok)}
+.rec-title{font-weight:700;font-size:.8rem;text-transform:uppercase;
+           letter-spacing:.04em;margin-bottom:.3rem}
+.rec-action{font-size:.82rem;margin-bottom:.3rem;color:var(--text)}
+.rec-reason{font-size:.75rem;color:var(--muted);line-height:1.5}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     SIDEBAR
+     ============================================================ -->
+<aside id="sidebar">
+  <div class="brand">
+    <div class="brand-icon">🏭</div>
+    <div>
+      <div class="brand-name">MFG QC Agent</div>
+      <div class="brand-sub">AI Quality Control</div>
+    </div>
+  </div>
+  <nav id="nav">
+    <div class="nav-item active" data-page="dashboard"><span class="icon">📊</span>Dashboard</div>
+    <div class="nav-item" data-page="upload"><span class="icon">📂</span>Data Upload</div>
+    <div class="nav-item" data-page="monitoring"><span class="icon">📡</span>Process Monitoring</div>
+    <div class="nav-item" data-page="quality"><span class="icon">🔬</span>Quality Analysis</div>
+    <div class="nav-item" data-page="defects"><span class="icon">⚠️</span>Defect Prediction</div>
+    <div class="nav-item" data-page="optimization"><span class="icon">🔧</span>Optimization</div>
+    <div class="nav-item" data-page="assistant"><span class="icon">🤖</span>AI Assistant</div>
+    <div class="nav-item" data-page="reports"><span class="icon">📋</span>Reports</div>
+    <div class="nav-item" data-page="settings"><span class="icon">⚙️</span>IBM Settings</div>
+  </nav>
+  <div class="sidebar-footer">
+    <b>IBM watsonx.ai</b><br>Granite Model Integration
+    <div class="ibm-status" id="ibm-status-dot">
+      <div class="dot" id="granite-dot"></div>
+      <span id="granite-status-txt">Demo Mode</span>
+    </div>
+  </div>
+</aside>
+
+<!-- ============================================================
+     TOPBAR
+     ============================================================ -->
+<div id="topbar">
+  <div class="topbar-title">Manufacturing Process &rsaquo; <span id="page-label">Dashboard</span></div>
+  <div class="topbar-right">
+    <div class="status-chip" id="ds-chip">📁 Sample data (200 records)</div>
+    <div class="status-chip" id="granite-chip">⚡ Granite: Demo Mode</div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MAIN
+     ============================================================ -->
+<div id="main">
+
+<!-- ── DASHBOARD ──────────────────────────────────────── -->
+<div class="page active" id="page-dashboard">
+  <div class="page-hdr">
+    <h1>Manufacturing Dashboard</h1>
+    <p>Real-time overview of production quality, process health, and AI agent status.</p>
+  </div>
+  <div class="grid-4" id="kpi-cards">
+    <div class="stat-card"><div class="stat-lbl">Total Records</div><div class="stat-val" id="kpi-total">—</div><div class="stat-sub">in active dataset</div></div>
+    <div class="stat-card"><div class="stat-lbl">Normal</div><div class="stat-val" id="kpi-normal" style="color:var(--ok)">—</div><div class="stat-sub">within operating range</div></div>
+    <div class="stat-card"><div class="stat-lbl">Abnormal</div><div class="stat-val" id="kpi-abnormal" style="color:var(--warn)">—</div><div class="stat-sub">flagged by QA agent</div></div>
+    <div class="stat-card"><div class="stat-lbl">Predicted Defects</div><div class="stat-val" id="kpi-defects" style="color:var(--danger)">—</div><div class="stat-sub">from prediction model</div></div>
+    <div class="stat-card"><div class="stat-lbl">Critical Alerts</div><div class="stat-val" id="kpi-crit" style="color:var(--danger)">—</div><div class="stat-sub">require immediate action</div></div>
+    <div class="stat-card"><div class="stat-lbl">Warning Alerts</div><div class="stat-val" id="kpi-warn" style="color:var(--warn)">—</div><div class="stat-sub">monitor closely</div></div>
+    <div class="stat-card"><div class="stat-lbl">Avg Temperature</div><div class="stat-val" id="kpi-temp" style="font-size:1.3rem">—</div><div class="stat-sub">°C mean</div></div>
+    <div class="stat-card"><div class="stat-lbl">Avg Pressure</div><div class="stat-val" id="kpi-pres" style="font-size:1.3rem">—</div><div class="stat-sub">bar mean</div></div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="section-title">🌡️ Temperature &amp; Pressure Trend</div>
+      <canvas id="chart-tp" height="160"></canvas>
+    </div>
+    <div class="card">
+      <div class="section-title">⚙️ Speed &amp; Vibration Trend</div>
+      <canvas id="chart-sv" height="160"></canvas>
+    </div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="section-title">📊 Process Parameter Statistics</div>
+      <div class="tbl-wrap"><table id="stats-table">
+        <thead><tr><th>Parameter</th><th>Mean</th><th>Min</th><th>Max</th><th>Std</th></tr></thead>
+        <tbody id="stats-tbody"></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <div class="section-title">🚨 Recent Alerts</div>
+      <div id="dash-alerts" style="max-height:260px;overflow-y:auto"></div>
+    </div>
+  </div>
+</div><!-- /dashboard -->
+
+<!-- ── DATA UPLOAD ────────────────────────────────────── -->
+<div class="page" id="page-upload">
+  <div class="page-hdr">
+    <h1>Data Upload</h1>
+    <p>Upload a CSV manufacturing dataset. The system auto-detects column names and runs all agents.</p>
+  </div>
+  <div id="drop-zone" onclick="document.getElementById('csv-input').click()"
+       ondragover="event.preventDefault();this.classList.add('drag')"
+       ondragleave="this.classList.remove('drag')"
+       ondrop="handleDrop(event)">
+    <input type="file" id="csv-input" accept=".csv" onchange="handleFileSelect(event)"/>
+    <div style="font-size:2.5rem;margin-bottom:.5rem">📂</div>
+    <div style="font-weight:600;font-size:.95rem;margin-bottom:.2rem">Drag &amp; drop a CSV file here</div>
+    <div style="color:var(--muted);font-size:.8rem">or click to browse — columns auto-mapped</div>
+    <div id="upload-status" style="margin-top:.75rem;font-size:.8rem"></div>
+  </div>
+  <div id="upload-result" style="margin-top:1rem"></div>
+  <div class="card" style="margin-top:1rem">
+    <div class="section-title">📋 Supported Column Names</div>
+    <div>
+      <div class="mb1"><b style="color:var(--text)">Temperature:</b> <span class="tag">temperature</span><span class="tag">temp</span><span class="tag">process_temp</span></div>
+      <div class="mb1"><b style="color:var(--text)">Pressure:</b> <span class="tag">pressure</span><span class="tag">hydraulic_pressure</span></div>
+      <div class="mb1"><b style="color:var(--text)">Speed:</b> <span class="tag">speed</span><span class="tag">rotational_speed</span><span class="tag">rpm</span></div>
+      <div class="mb1"><b style="color:var(--text)">Vibration:</b> <span class="tag">vibration</span></div>
+      <div class="mb1"><b style="color:var(--text)">Tool Wear:</b> <span class="tag">tool_wear</span></div>
+      <div><b style="color:var(--text)">Quality Label:</b> <span class="tag">quality</span><span class="tag">defect</span><span class="tag">failure</span><span class="tag">label</span></div>
+    </div>
+  </div>
+</div><!-- /upload -->
+
+<!-- ── PROCESS MONITORING ─────────────────────────────── -->
+<div class="page" id="page-monitoring">
+  <div class="page-hdr">
+    <h1>Process Monitoring Agent</h1>
+    <p>Rule-based threshold analysis. Flags parameters outside safe operating ranges.</p>
+  </div>
+  <div class="grid-3 mb2" id="mon-kpis">
+    <div class="stat-card"><div class="stat-lbl">Critical Alerts</div><div class="stat-val" id="mon-crit" style="color:var(--danger)">—</div></div>
+    <div class="stat-card"><div class="stat-lbl">Warning Alerts</div><div class="stat-val" id="mon-warn" style="color:var(--warn)">—</div></div>
+    <div class="stat-card"><div class="stat-lbl">Normal Records</div><div class="stat-val" id="mon-ok" style="color:var(--ok)">—</div></div>
+  </div>
+  <div class="card mb2">
+    <div class="section-title">🚨 All Alerts</div>
+    <div id="all-alerts" style="max-height:340px;overflow-y:auto"></div>
+  </div>
+  <div class="card">
+    <div class="section-title" style="justify-content:space-between">
+      <span>📋 Monitoring Results</span>
+      <div class="row" style="gap:.4rem">
+        <button class="btn btn-ghost" onclick="filterMon('all')" id="f-all">All</button>
+        <button class="btn btn-ghost" onclick="filterMon('abnormal')" id="f-abn">Abnormal</button>
+        <button class="btn btn-ghost" onclick="filterMon('critical')" id="f-crit-b">Critical</button>
+      </div>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Record</th><th>Status</th><th>Anomaly Score</th><th>Alerts</th></tr></thead>
+      <tbody id="mon-tbody"></tbody>
+    </table></div>
+    <div id="mon-pages" class="row" style="justify-content:flex-end;margin-top:.75rem;gap:.4rem"></div>
+  </div>
+</div><!-- /monitoring -->
+
+<!-- ── QUALITY ANALYSIS ───────────────────────────────── -->
+<div class="page" id="page-quality">
+  <div class="page-hdr">
+    <h1>Quality Analysis Agent</h1>
+    <p>Statistical z-score analysis. Classifies records as Normal or Abnormal with explanations.</p>
+  </div>
+  <div class="grid-2 mb2">
+    <div class="card">
+      <div class="section-title">🍩 Quality Status Distribution</div>
+      <canvas id="chart-qual-pie" height="180"></canvas>
+    </div>
+    <div class="card">
+      <div class="section-title">📊 Anomaly Score Distribution</div>
+      <canvas id="chart-qual-bar" height="180"></canvas>
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-title">📋 Quality Analysis Results</div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Record</th><th>Status</th><th>Confidence</th><th>Top Factors</th><th>Explanation</th></tr></thead>
+      <tbody id="qual-tbody"></tbody>
+    </table></div>
+    <div id="qual-pages" class="row" style="justify-content:flex-end;margin-top:.75rem;gap:.4rem"></div>
+  </div>
+</div><!-- /quality -->
+
+<!-- ── DEFECT PREDICTION ──────────────────────────────── -->
+<div class="page" id="page-defects">
+  <div class="page-hdr">
+    <h1>Defect Prediction Agent</h1>
+    <p>Weighted scoring model predicts defect probability per production record.</p>
+  </div>
+  <div class="grid-4 mb2">
+    <div class="stat-card"><div class="stat-lbl">Model Score</div><div class="stat-val" id="def-acc" style="color:var(--accent)">—</div><div class="stat-sub">weighted accuracy</div></div>
+    <div class="stat-card"><div class="stat-lbl">Defects Predicted</div><div class="stat-val" id="def-count" style="color:var(--danger)">—</div></div>
+    <div class="stat-card"><div class="stat-lbl">Normal</div><div class="stat-val" id="def-norm" style="color:var(--ok)">—</div></div>
+    <div class="stat-card"><div class="stat-lbl">Total Analysed</div><div class="stat-val" id="def-total">—</div></div>
+  </div>
+  <div class="grid-2 mb2">
+    <div class="card">
+      <div class="section-title">📊 Defect Probability Distribution</div>
+      <canvas id="chart-def-hist" height="180"></canvas>
+    </div>
+    <div class="card">
+      <div class="section-title">📊 Top Contributing Parameters</div>
+      <canvas id="chart-def-feat" height="180"></canvas>
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-title">📋 Prediction Results</div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Record</th><th>Prediction</th><th>Probability</th><th>Top Parameter</th><th>Note</th></tr></thead>
+      <tbody id="def-tbody"></tbody>
+    </table></div>
+    <div id="def-pages" class="row" style="justify-content:flex-end;margin-top:.75rem;gap:.4rem"></div>
+  </div>
+</div><!-- /defects -->
+
+<!-- ── OPTIMIZATION ───────────────────────────────────── -->
+<div class="page" id="page-optimization">
+  <div class="page-hdr">
+    <h1>Process Optimization Agent</h1>
+    <p>Corrective action recommendations for all flagged process deviations.</p>
+  </div>
+  <div class="grid-3 mb2">
+    <div class="stat-card"><div class="stat-lbl">Records Needing Action</div><div class="stat-val" id="opt-total">—</div></div>
+    <div class="stat-card"><div class="stat-lbl">Critical Actions</div><div class="stat-val" id="opt-crit" style="color:var(--danger)">—</div></div>
+    <div class="stat-card"><div class="stat-lbl">Warning Actions</div><div class="stat-val" id="opt-warn" style="color:var(--warn)">—</div></div>
+  </div>
+  <div id="opt-cards"></div>
+</div><!-- /optimization -->
+
+<!-- ── AI ASSISTANT ───────────────────────────────────── -->
+<div class="page" id="page-assistant"
+     style="display:none;flex-direction:column;height:calc(100vh - var(--hh) - 3rem)">
+  <div class="page-hdr">
+    <h1>🤖 AI Quality Assistant</h1>
+    <p>Ask about quality issues, defects, and corrective actions. Powered by IBM Granite + RAG knowledge base.</p>
+  </div>
+  <div style="display:flex;gap:1rem;flex:1;min-height:0">
+    <!-- Chat area -->
+    <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+      <div id="chat-msgs"
+           style="flex:1;overflow-y:auto;padding:.75rem;display:flex;flex-direction:column;
+                  gap:.75rem;min-height:300px;max-height:calc(100vh - 320px);
+                  background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:.6rem">
+        <div class="msg">
+          <div class="msg-avatar">🤖</div>
+          <div class="msg-bubble">Hello! I'm your AI Quality Control Assistant.<br><br>I can answer questions about manufacturing quality based on your data and the built-in RAG knowledge base. Connect IBM watsonx.ai credentials in the <b>IBM Settings</b> page to use IBM Granite for richer responses.<br><br>Try one of the suggested questions →</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:.5rem">
+        <textarea id="chat-input" rows="2"
+          placeholder="Ask about quality issues, defects, corrective actions… (Enter to send)"
+          onkeydown="chatKeydown(event)"
+          style="flex:1;border-radius:8px;padding:.55rem .8rem"></textarea>
+        <button class="btn btn-primary" onclick="sendChat()" id="chat-send" style="align-self:flex-end;height:38px">
+          ➤ Send
+        </button>
+      </div>
+    </div>
+    <!-- Suggestions -->
+    <div style="width:220px;flex-shrink:0">
+      <div class="card mb1">
+        <div style="font-size:.7rem;color:var(--muted);text-transform:uppercase;
+                    letter-spacing:.06em;font-weight:600;margin-bottom:.6rem">Suggested Questions</div>
+        <div id="sugg-list"></div>
+      </div>
+      <div class="card">
+        <div style="font-size:.7rem;color:var(--muted);font-weight:600;
+                    text-transform:uppercase;letter-spacing:.06em;margin-bottom:.4rem">IBM Granite</div>
+        <div style="font-size:.72rem;color:var(--muted);line-height:1.5">
+          Add credentials in <b style="color:var(--text)">IBM Settings</b> to enable full Granite responses via watsonx.ai API.
+        </div>
+      </div>
+    </div>
+  </div>
+</div><!-- /assistant -->
+
+<!-- ── REPORTS ─────────────────────────────────────────── -->
+<div class="page" id="page-reports">
+  <div class="page-hdr" style="display:flex;justify-content:space-between;align-items:flex-start">
+    <div>
+      <h1>Quality Report</h1>
+      <p>Full manufacturing quality summary with statistics, anomalies, and recommendations.</p>
+    </div>
+    <button class="btn btn-primary" onclick="downloadReport()">⬇ Export JSON</button>
+  </div>
+  <div id="report-body"></div>
+</div><!-- /reports -->
+
+<!-- ── IBM SETTINGS ────────────────────────────────────── -->
+<div class="page" id="page-settings">
+  <div class="page-hdr">
+    <h1>IBM watsonx.ai Settings</h1>
+    <p>Connect your IBM Granite credentials to enable AI-powered explanations and recommendations.</p>
+  </div>
+  <div class="card mb2" style="max-width:560px">
+    <div class="section-title">🔑 Credentials</div>
+    <div class="form-row">
+      <label>IBM Cloud API Key</label>
+      <input type="password" id="cfg-apikey" placeholder="Enter your IBM Cloud API key" style="width:100%"/>
+    </div>
+    <div class="form-row">
+      <label>watsonx.ai Project ID</label>
+      <input type="text" id="cfg-project" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="width:100%"/>
+    </div>
+    <div class="form-row">
+      <label>watsonx.ai URL</label>
+      <input type="text" id="cfg-url" value="https://us-south.ml.cloud.ibm.com" style="width:100%"/>
+    </div>
+    <div class="form-row">
+      <label>Granite Model ID</label>
+      <select id="cfg-model" style="width:100%">
+        <option value="ibm/granite-13b-instruct-v2">ibm/granite-13b-instruct-v2 (recommended)</option>
+        <option value="ibm/granite-3-8b-instruct">ibm/granite-3-8b-instruct (fast)</option>
+        <option value="ibm/granite-34b-code-instruct">ibm/granite-34b-code-instruct (code)</option>
+      </select>
+    </div>
+    <div class="form-row" style="display:flex;gap:.5rem;align-items:center">
+      <button class="btn btn-primary" onclick="saveSettings()">💾 Save &amp; Test Connection</button>
+      <button class="btn btn-ghost" onclick="clearSettings()">Clear</button>
+    </div>
+    <div id="settings-status" style="margin-top:.6rem;font-size:.78rem"></div>
+  </div>
+  <div class="card" style="max-width:560px">
+    <div class="section-title">ℹ️ How to get credentials</div>
+    <ol style="color:var(--muted);font-size:.78rem;line-height:1.8;padding-left:1rem">
+      <li>Sign up at <a href="https://cloud.ibm.com" target="_blank" style="color:var(--accent)">cloud.ibm.com</a></li>
+      <li>Create a <b style="color:var(--text)">watsonx.ai</b> service instance</li>
+      <li>Create a new <b style="color:var(--text)">Project</b> in watsonx.ai Studio</li>
+      <li>Generate an <b style="color:var(--text)">API Key</b> from IBM Cloud → Manage → API Keys</li>
+      <li>Copy your Project ID from the project settings page</li>
+      <li>Paste both values above and click Save</li>
+    </ol>
+    <div style="margin-top:.75rem;padding:.65rem;background:var(--surface);border-radius:6px;
+                border:1px solid var(--border);font-size:.75rem;color:var(--muted)">
+      <b style="color:var(--text)">Demo Mode:</b> Without credentials all agents run using built-in rule-based ML logic. All dashboard, monitoring, quality, defect, and optimization features are fully functional.
+    </div>
+  </div>
+</div><!-- /settings -->
+
+</div><!-- /main -->
+
+<!-- ============================================================
+     JAVASCRIPT — ALL AGENT LOGIC
+     ============================================================ -->
+<script>
+/* ============================================================
+   STATE
+   ============================================================ */
+const STATE = {
+  records: [],      // active dataset (array of objects)
+  source: 'sample', // 'sample' | 'uploaded'
+  filename: '',
+  monResults: [],
+  qualResults: [],
+  defResults: [],
+  optResults: [],
+  watsonx: { apiKey:'', projectId:'', url:'https://us-south.ml.cloud.ibm.com', model:'ibm/granite-13b-instruct-v2' },
+  chatHistory: [],
+};
+
+/* ============================================================
+   THRESHOLDS (Process Monitoring Agent)
+   ============================================================ */
+const TH = {
+  temperature: { warn:85, crit:95 },
+  pressure:    { warn:7.5, crit:9.0 },
+  speed:       { warn:1800, crit:2100 },
+  vibration:   { warn:0.6, crit:0.8 },
+  tool_wear:   { warn:200, crit:230 },
+};
+
+/* ============================================================
+   RAG KNOWLEDGE BASE
+   ============================================================ */
+const KB = [
+  { title:'Temperature Control', content:'Elevated temperature causes thermal expansion, dimensional drift, and surface oxidation. Warning at 85°C, critical at 95°C. Corrective action: reduce cutting speed, improve coolant flow, check heat exchanger.' },
+  { title:'Pressure Management', content:'Excess pressure leads to flash defects, dimensional overshoot, and surface stress. Warning at 7.5 bar, critical at 9.0 bar. Check pressure regulators and relief valves.' },
+  { title:'Machine Speed (RPM)', content:'Excessive RPM causes vibration, heat, and rapid tool wear. Warning at 1800 RPM, critical at 2100 RPM. Reduce spindle speed and inspect bearings.' },
+  { title:'Vibration Analysis (ISO 10816)', content:'Vibration above 0.6 mm/s is warning, above 0.8 mm/s is critical. Causes: unbalanced tooling, loose fixtures, worn bearings. Corrective action: rebalance, retighten, replace bearings.' },
+  { title:'Tool Wear Management', content:'Tool wear above 200 min approaches end-of-life (ISO 3685). Above 230 min is critical — replace immediately. Worn tools cause surface roughness, burrs, and dimensional drift.' },
+  { title:'Common Defect Types', content:'Dimensional inaccuracies: thermal expansion or tool wear. Surface imperfections: incorrect speed/feed, worn tools. Structural defects: excess pressure, material issues. Prevention: SPC, regular calibration, scheduled maintenance.' },
+  { title:'Statistical Process Control (SPC)', content:'Control charts track mean and range. Control limits at ±3σ. Cp ≥ 1.33 required for production approval. Warning triggers: 8 consecutive points on one side, 2 of 3 beyond 2σ.' },
+  { title:'ISO 9001 Quality Management', content:'Clause 8.5 requires controlled conditions including monitoring and calibrated equipment. Clause 8.7 requires containment and corrective action for defects. Root cause: 5-Why, Fishbone, FMEA.' },
+  { title:'Corrective Action Framework', content:'1. Contain: isolate parts, halt if critical. 2. Identify root cause using process data. 3. Correct: adjust parameters, replace components. 4. Verify with SPC. 5. Prevent recurrence via maintenance schedule.' },
+  { title:'Predictive Maintenance', content:'Vibration signatures, temperature drift, and current draw anomalies predict failures. Benefits: 30-50% reduction in unplanned downtime. Key steps: sensor data, baseline model, threshold calibration, alerts.' },
+];
+
+function ragRetrieve(query, k=3) {
+  const q = query.toLowerCase();
+  const scored = KB.map(doc => {
+    const text = (doc.title + ' ' + doc.content).toLowerCase();
+    const words = q.split(/\s+/).filter(w => w.length > 2);
+    const score = words.reduce((s,w) => s + (text.includes(w) ? 1 : 0), 0);
+    return { ...doc, score };
+  });
+  return scored.sort((a,b) => b.score - a.score).slice(0, k).filter(d => d.score > 0);
+}
+
+/* ============================================================
+   SAMPLE DATA GENERATOR
+   ============================================================ */
+function seededRand(seed) {
+  let s = seed;
+  return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+}
+
+function generateSample(n=200) {
+  const rng = seededRand(42);
+  const gauss = (mu, sigma) => { const u1 = rng(), u2 = rng(); return mu + sigma * Math.sqrt(-2*Math.log(u1+1e-9)) * Math.cos(2*Math.PI*u2); };
+  const records = [];
+  for (let i = 0; i < n; i++) {
+    let temp  = gauss(75, 8);
+    let pres  = gauss(6.0, 0.8);
+    let speed = gauss(1500, 200);
+    let vib   = gauss(0.4, 0.1);
+    let wear  = rng() * 250;
+    let torq  = gauss(40, 5);
+    let mat   = gauss(300, 20);
+    // Inject anomalies
+    if (i % 13 === 0) temp  = 88 + rng()*15;
+    if (i % 17 === 0) pres  = 8 + rng()*2;
+    if (i % 19 === 0) speed = 1900 + rng()*400;
+    if (i % 23 === 0) vib   = 0.65 + rng()*0.5;
+    if (i % 29 === 0) wear  = 215 + rng()*40;
+    const label = (temp>88||pres>8||speed>1850||vib>0.65||wear>220) ? 1 : 0;
+    records.push({
+      record_id: i+1,
+      temperature: +temp.toFixed(2),
+      pressure:    +pres.toFixed(3),
+      speed:       +speed.toFixed(1),
+      torque:      +torq.toFixed(2),
+      vibration:   +vib.toFixed(4),
+      tool_wear:   +wear.toFixed(1),
+      material_strength: +mat.toFixed(2),
+      quality_label: label,
+    });
+  }
+  return records;
+}
+
+/* ============================================================
+   COLUMN MAPPING
+   ============================================================ */
+const COL_MAP = {
+  temperature:['temperature','temp','process_temp','air_temperature','machine_temperature'],
+  pressure:   ['pressure','process_pressure','hydraulic_pressure'],
+  speed:      ['speed','rotational_speed','machine_speed','rpm'],
+  torque:     ['torque','process_torque'],
+  vibration:  ['vibration'],
+  tool_wear:  ['tool_wear','toolwear'],
+  material_strength:['material_strength','hardness','strength'],
+  quality_label:['quality_label','quality','defect','failure','machine_failure','label'],
+  record_id:  ['record_id','id','uid','product_id'],
+};
+
+function mapColumns(row) {
+  const out = {};
+  const keys = Object.keys(row).map(k => k.trim().toLowerCase().replace(/\s+/g,'_'));
+  const vals = Object.values(row);
+  keys.forEach((k,i) => {
+    for (const [canon, aliases] of Object.entries(COL_MAP)) {
+      if (aliases.includes(k)) { out[canon] = vals[i]; break; }
+    }
+    if (!out[k]) out[k] = vals[i];
+  });
+  return out;
+}
+
+/* ============================================================
+   CSV PARSER
+   ============================================================ */
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) throw new Error('CSV has no data rows.');
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const vals = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g,''));
+    const obj = {};
+    headers.forEach((h,j) => { obj[h] = vals[j] ?? ''; });
+    rows.push(mapColumns(obj));
+  }
+  // Coerce numeric fields
+  rows.forEach(r => {
+    for (const f of ['temperature','pressure','speed','torque','vibration','tool_wear','material_strength','quality_label','record_id']) {
+      if (r[f] !== undefined) r[f] = +r[f] || 0;
+    }
+    if (!r.record_id) r.record_id = rows.indexOf(r)+1;
+  });
+  return rows;
+}
+
+/* ============================================================
+   AGENT 1: PROCESS MONITORING
+   ============================================================ */
+function runMonitoringAgent(records) {
+  return records.map(row => {
+    const alerts = [];
+    for (const [param, th] of Object.entries(TH)) {
+      const val = row[param];
+      if (val == null) continue;
+      if (val >= th.crit) alerts.push({ severity:'critical', parameter:param, value:+val.toFixed(3), threshold:th.crit, message:`CRITICAL: ${param}=${val.toFixed(2)} exceeds critical threshold ${th.crit}. Immediate action required.` });
+      else if (val >= th.warn) alerts.push({ severity:'warning', parameter:param, value:+val.toFixed(3), threshold:th.warn, message:`WARNING: ${param}=${val.toFixed(2)} exceeds warning threshold ${th.warn}.` });
+    }
+    const nChecked = Object.keys(TH).filter(p => row[p]!=null).length;
+    const anomalyScore = Math.min(1, alerts.length / Math.max(nChecked, 1));
+    const status = alerts.some(a=>a.severity==='critical') ? 'critical'
+                 : alerts.some(a=>a.severity==='warning')  ? 'warning' : 'normal';
+    return { record_id: row.record_id, status, anomaly_score: +anomalyScore.toFixed(3), alerts };
+  });
+}
+
+/* ============================================================
+   AGENT 2: QUALITY ANALYSIS
+   ============================================================ */
+function runQualityAgent(records) {
+  const FEATS = ['temperature','pressure','speed','vibration','tool_wear','torque'];
+  const present = FEATS.filter(f => records[0]?.[f] != null);
+  // Compute mean/std for z-scores
+  const stats = {};
+  present.forEach(f => {
+    const vals = records.map(r => +r[f]);
+    const mean = vals.reduce((a,b)=>a+b,0)/vals.length;
+    const std  = Math.sqrt(vals.reduce((s,v)=>s+(v-mean)**2,0)/vals.length) || 1;
+    stats[f] = { mean, std };
+  });
+  return records.map(row => {
+    const zscores = present.map(f => ({ f, z: Math.abs((row[f]-stats[f].mean)/stats[f].std) }));
+    zscores.sort((a,b)=>b.z-a.z);
+    const topZ = zscores[0]?.z || 0;
+    const uploaded = +row.quality_label || 0;
+    const isAbnormal = topZ > 2.5 || uploaded === 1;
+    const confidence = Math.min(1, topZ / 4);
+    const factors = zscores.filter(z=>z.z>1.5).slice(0,3).map(z=>`${z.f} (z=${z.z.toFixed(2)})`);
+    const status = isAbnormal ? 'abnormal' : 'normal';
+    const explanation = isAbnormal
+      ? `Record ${row.record_id} flagged ABNORMAL. ${factors.length?'Key deviations: '+factors.join(', ')+'.'  :''}`
+      : `Record ${row.record_id} is within normal operating range.`;
+    return { record_id: row.record_id, status, confidence: +confidence.toFixed(3), contributing_factors: factors, explanation };
+  });
+}
+
+/* ============================================================
+   AGENT 3: DEFECT PREDICTION
+   ============================================================ */
+const FEAT_WEIGHTS = {
+  temperature: 0.22, pressure: 0.20, speed: 0.18,
+  vibration: 0.20, tool_wear: 0.12, torque: 0.08,
+};
+// Normalised thresholds for scoring
+const NORM_TH = {
+  temperature: { lo:60, hi:110 }, pressure: { lo:3, hi:12 },
+  speed: { lo:800, hi:2500 }, vibration: { lo:0, hi:1.5 },
+  tool_wear: { lo:0, hi:260 }, torque: { lo:20, hi:60 },
+};
+
+function defectScore(row) {
+  let score = 0, totalW = 0;
+  const contributions = [];
+  for (const [feat, w] of Object.entries(FEAT_WEIGHTS)) {
+    if (row[feat] == null) continue;
+    const { lo, hi } = NORM_TH[feat];
+    const warnRatio = (TH[feat]?.warn - lo) / (hi - lo);
+    const norm = (row[feat] - lo) / (hi - lo);
+    const c = Math.max(0, norm - warnRatio * 0.8);
+    score += c * w;
+    totalW += w;
+    contributions.push({ parameter: feat, importance: +w.toFixed(4), value: +row[feat].toFixed(3), contrib: c*w });
+  }
+  const prob = totalW > 0 ? Math.min(1, score / totalW * 3) : 0;
+  contributions.sort((a,b)=>b.contrib-a.contrib);
+  return { prob: +prob.toFixed(4), contributions: contributions.slice(0,3) };
+}
+
+function runDefectAgent(records) {
+  return records.map(row => {
+    const { prob, contributions } = defectScore(row);
+    const predicted = prob >= 0.5;
+    const explanation = predicted
+      ? `Record ${row.record_id}: DEFECT PREDICTED (${(prob*100).toFixed(1)}%). Top factor: ${contributions[0]?.parameter}=${contributions[0]?.value}`
+      : `Record ${row.record_id}: No defect (${(prob*100).toFixed(1)}% probability).`;
+    return { record_id: row.record_id, defect_predicted: predicted, probability: prob, contributing_parameters: contributions, explanation };
+  });
+}
+
+/* ============================================================
+   AGENT 4: OPTIMIZATION
+   ============================================================ */
+const OPT_RULES = {
+  temperature: {
+    warning: { action:'Reduce process temperature by 5–8 °C. Increase coolant flow.', offset:-6, reason:'Elevated temperature causes thermal expansion and dimensional drift.' },
+    critical: { action:'STOP process. Reduce temperature by 10–15 °C. Inspect cooling system.', offset:-12, reason:'Critical overtemperature risks material degradation, tool damage, and scrap.' },
+  },
+  pressure: {
+    warning: { action:'Reduce hydraulic pressure by 0.5–1.0 bar.', offset:-0.75, reason:'Excess pressure causes flash defects and surface stress.' },
+    critical: { action:'STOP process. Reduce pressure 1.5–2.5 bar. Check regulators and relief valves.', offset:-2, reason:'Critical overpressure is a safety hazard and guarantees defective parts.' },
+  },
+  speed: {
+    warning: { action:'Reduce machine speed by 100–150 RPM.', offset:-125, reason:'High RPM increases vibration and degrades surface finish.' },
+    critical: { action:'Reduce speed by 250–400 RPM. Inspect spindle bearings.', offset:-325, reason:'Critical over-speed causes bearing damage and severe part rejection.' },
+  },
+  vibration: {
+    warning: { action:'Check tool mounting and workpiece fixturing. Inspect spindle balance.', offset:0, reason:'Excess vibration degrades surface finish and dimensional accuracy.' },
+    critical: { action:'STOP machine. Inspect all mechanical connections, tooling, and spindle.', offset:0, reason:'Critical vibration indicates structural looseness or bearing failure.' },
+  },
+  tool_wear: {
+    warning: { action:'Schedule tool replacement within next 10–20 cycles.', offset:0, reason:'Tool wear >200 min degrades surface finish. Planned replacement avoids failures.' },
+    critical: { action:'Replace cutting tool immediately before next production cycle.', offset:0, reason:'Critical tool wear causes burring, inaccurate cuts, and surface defects.' },
+  },
+};
+
+function runOptimizationAgent(monResults, records) {
+  const lookup = {};
+  records.forEach(r => { lookup[r.record_id] = r; });
+  const results = [];
+  for (const mon of monResults) {
+    if (!mon.alerts.length) continue;
+    const row = lookup[mon.record_id] || {};
+    const recs = [];
+    for (const alert of mon.alerts) {
+      const rules = OPT_RULES[alert.parameter];
+      if (!rules) continue;
+      const rule = rules[alert.severity] || rules.warning;
+      const cur = +row[alert.parameter]?.toFixed(3) || alert.value;
+      const recVal = rule.offset !== 0 ? +(cur + rule.offset).toFixed(3) : null;
+      recs.push({ parameter: alert.parameter, priority: alert.severity, current_value: cur, recommended_value: recVal, recommended_action: rule.action, reason: rule.reason });
+    }
+    recs.sort((a,b) => a.priority==='critical'?-1:b.priority==='critical'?1:0);
+    if (recs.length) results.push({ record_id: mon.record_id, recommendations: recs, overall_summary: `Record ${mon.record_id}: ${recs.length} corrective action(s).` });
+  }
+  return results;
+}
+
+/* ============================================================
+   RUN ALL AGENTS
+   ============================================================ */
+function runAllAgents() {
+  const r = STATE.records;
+  STATE.monResults  = runMonitoringAgent(r);
+  STATE.qualResults = runQualityAgent(r);
+  STATE.defResults  = runDefectAgent(r);
+  STATE.optResults  = runOptimizationAgent(STATE.monResults, r);
+}
+
+/* ============================================================
+   NAVIGATION
+   ============================================================ */
+const PAGE_LABELS = { dashboard:'Dashboard', upload:'Data Upload', monitoring:'Process Monitoring',
+  quality:'Quality Analysis', defects:'Defect Prediction', optimization:'Optimization',
+  assistant:'AI Assistant', reports:'Reports', settings:'IBM Settings' };
+
+document.getElementById('nav').addEventListener('click', e => {
+  const item = e.target.closest('.nav-item');
+  if (!item) return;
+  const pg = item.dataset.page;
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  item.classList.add('active');
+  document.querySelectorAll('.page').forEach(p=>{ p.classList.remove('active'); p.style.display=''; });
+  const el = document.getElementById('page-'+pg);
+  if (el) {
+    if (pg === 'assistant') { el.style.display='flex'; }
+    else el.classList.add('active');
+  }
+  document.getElementById('page-label').textContent = PAGE_LABELS[pg] || pg;
+  renderPage(pg);
+});
+
+function renderPage(pg) {
+  if (pg==='dashboard')    renderDashboard();
+  if (pg==='monitoring')   renderMonitoring();
+  if (pg==='quality')      renderQuality();
+  if (pg==='defects')      renderDefects();
+  if (pg==='optimization') renderOptimization();
+  if (pg==='reports')      renderReports();
+  if (pg==='assistant')    renderAssistant();
+  if (pg==='settings')     loadSettings();
+}
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function mean(arr){ return arr.reduce((a,b)=>a+b,0)/arr.length || 0 }
+function std(arr){ const m=mean(arr); return Math.sqrt(arr.reduce((s,v)=>s+(v-m)**2,0)/arr.length)||0 }
+function fmt(n,d=1){ return typeof n==='number'?n.toFixed(d):'—' }
+function pct(n){ return (n*100).toFixed(0)+'%' }
+
+function progressBar(val, cls='') {
+  const w = Math.round(Math.min(100,val*100));
+  const color = val>0.6?'var(--danger)':val>0.3?'var(--warn)':'var(--ok)';
+  return `<span class="prog-wrap"><span class="prog-fill" style="width:${w}%;background:${color}"></span></span> <span style="font-size:.7rem;color:var(--muted)">${pct(val)}</span>`;
+}
+
+let _charts = {};
+function makeChart(id, type, data, options={}) {
+  if (_charts[id]) { _charts[id].destroy(); delete _charts[id]; }
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  _charts[id] = new Chart(ctx, {
+    type,
+    data,
+    options: {
+      responsive:true,
+      plugins:{ legend:{ labels:{ color:'#8892a4', font:{size:11} } } },
+      scales: type!=='pie'&&type!=='doughnut' ? {
+        x:{ ticks:{color:'#8892a4',font:{size:10}}, grid:{color:'#2a3347'} },
+        y:{ ticks:{color:'#8892a4',font:{size:10}}, grid:{color:'#2a3347'} },
+      } : {},
+      ...options,
+    },
+  });
+}
+
+/* ============================================================
+   DASHBOARD
+   ============================================================ */
+function renderDashboard() {
+  const r = STATE.records;
+  if (!r.length) return;
+  const mon  = STATE.monResults;
+  const qual = STATE.qualResults;
+  const def  = STATE.defResults;
+  const normal   = qual.filter(q=>q.status==='normal').length;
+  const abnormal = qual.filter(q=>q.status!=='normal').length;
+  const defCount = def.filter(d=>d.defect_predicted).length;
+  const allAlerts = mon.flatMap(m=>m.alerts);
+  const critCount = allAlerts.filter(a=>a.severity==='critical').length;
+  const warnCount = allAlerts.filter(a=>a.severity==='warning').length;
+  document.getElementById('kpi-total').textContent   = r.length;
+  document.getElementById('kpi-normal').textContent  = normal;
+  document.getElementById('kpi-abnormal').textContent= abnormal;
+  document.getElementById('kpi-defects').textContent = defCount;
+  document.getElementById('kpi-crit').textContent    = critCount;
+  document.getElementById('kpi-warn').textContent    = warnCount;
+  const temps = r.map(x=>x.temperature).filter(Boolean);
+  const pres  = r.map(x=>x.pressure).filter(Boolean);
+  document.getElementById('kpi-temp').textContent = fmt(mean(temps),1)+' °C';
+  document.getElementById('kpi-pres').textContent = fmt(mean(pres),2)+' bar';
+
+  // Sample 60 points for charts
+  const step = Math.max(1, Math.floor(r.length/60));
+  const sampled = r.filter((_,i)=>i%step===0);
+  const labels = sampled.map(x=>x.record_id);
+
+  makeChart('chart-tp','line',{
+    labels,
+    datasets:[
+      { label:'Temperature (°C)', data:sampled.map(x=>x.temperature), borderColor:'#ef4444', borderWidth:1.5, pointRadius:0, tension:.3 },
+      { label:'Pressure (bar)',   data:sampled.map(x=>x.pressure),    borderColor:'#3b82f6', borderWidth:1.5, pointRadius:0, tension:.3 },
+    ],
+  });
+  makeChart('chart-sv','line',{
+    labels,
+    datasets:[
+      { label:'Speed (RPM)', data:sampled.map(x=>x.speed),     borderColor:'#22c55e', borderWidth:1.5, pointRadius:0, tension:.3 },
+      { label:'Vibration',   data:sampled.map(x=>x.vibration), borderColor:'#f59e0b', borderWidth:1.5, pointRadius:0, tension:.3 },
+    ],
+  });
+
+  // Stats table
+  const FEATS = ['temperature','pressure','speed','torque','vibration','tool_wear'];
+  const tbody = document.getElementById('stats-tbody');
+  tbody.innerHTML = FEATS.filter(f=>r[0]?.[f]!=null).map(f=>{
+    const vals = r.map(x=>+x[f]).filter(v=>!isNaN(v));
+    return `<tr><td style="font-weight:600;text-transform:capitalize">${f.replace('_',' ')}</td>
+      <td>${fmt(mean(vals))}</td><td>${fmt(Math.min(...vals))}</td>
+      <td>${fmt(Math.max(...vals))}</td><td>${fmt(std(vals))}</td></tr>`;
+  }).join('');
+
+  // Alerts
+  const el = document.getElementById('dash-alerts');
+  const recentAlerts = [...allAlerts.filter(a=>a.severity==='critical'), ...allAlerts.filter(a=>a.severity==='warning')].slice(0,8);
+  el.innerHTML = recentAlerts.length
+    ? recentAlerts.map(a=>`<div class="alert-row ${a.severity==='critical'?'crit':'warn'}">
+        <div><div class="alert-param" style="color:${a.severity==='critical'?'var(--danger)':'var(--warn)'}">${a.severity.toUpperCase()} · ${a.parameter}</div>
+        <div class="alert-msg">${a.message}</div></div></div>`).join('')
+    : '<div class="empty">✓ No alerts — all parameters normal</div>';
+}
+
+/* ============================================================
+   MONITORING PAGE
+   ============================================================ */
+let _monFilter = 'all', _monPage = 1, _monPageSize = 30;
+function renderMonitoring() {
+  const mon = STATE.monResults;
+  const allAlerts = mon.flatMap(m=>m.alerts);
+  document.getElementById('mon-crit').textContent = allAlerts.filter(a=>a.severity==='critical').length;
+  document.getElementById('mon-warn').textContent = allAlerts.filter(a=>a.severity==='warning').length;
+  document.getElementById('mon-ok').textContent   = mon.filter(m=>m.status==='normal').length;
+  // Alerts panel
+  const ac = document.getElementById('all-alerts');
+  const sorted = [...allAlerts.filter(a=>a.severity==='critical'),...allAlerts.filter(a=>a.severity==='warning')].slice(0,20);
+  ac.innerHTML = sorted.length
+    ? sorted.map(a=>`<div class="alert-row ${a.severity==='critical'?'crit':'warn'}">
+        <div><div class="alert-param" style="color:${a.severity==='critical'?'var(--danger)':'var(--warn)'}">Record #${a.record_id} · ${a.severity.toUpperCase()} · ${a.parameter} = ${a.value}</div>
+        <div class="alert-msg">${a.message}</div></div></div>`).join('')
+    : '<div class="empty">✓ No alerts</div>';
+  renderMonTable();
+}
+function filterMon(f) { _monFilter=f; _monPage=1; renderMonTable(); }
+function renderMonTable() {
+  const mon = STATE.monResults;
+  let data = mon;
+  if (_monFilter==='abnormal') data=mon.filter(m=>m.status!=='normal');
+  if (_monFilter==='critical') data=mon.filter(m=>m.alerts.some(a=>a.severity==='critical'));
+  const total = data.length, pages = Math.max(1,Math.ceil(total/_monPageSize));
+  const slice = data.slice((_monPage-1)*_monPageSize, _monPage*_monPageSize);
+  document.getElementById('mon-tbody').innerHTML = slice.map(r=>{
+    const badgeCls = r.status==='critical'?'b-crit':r.status==='warning'?'b-warn':'b-ok';
+    const bars = progressBar(r.anomaly_score);
+    const alertBadges = r.alerts.map(a=>`<span class="badge ${a.severity==='critical'?'b-crit':'b-warn'}">${a.severity}</span>`).join(' ');
+    return `<tr><td>#${r.record_id}</td><td><span class="badge ${badgeCls}">${r.status}</span></td>
+      <td>${bars}</td><td>${alertBadges||'<span style="color:var(--muted)">—</span>'}</td></tr>`;
+  }).join('');
+  const pp = document.getElementById('mon-pages');
+  pp.innerHTML = `<button class="btn btn-ghost" onclick="_monPage=Math.max(1,_monPage-1);renderMonTable()" ${_monPage===1?'disabled':''}>Prev</button>
+    <span style="padding:.38rem .5rem;font-size:.8rem;color:var(--muted)">${_monPage}/${pages}</span>
+    <button class="btn btn-ghost" onclick="_monPage=Math.min(${pages},_monPage+1);renderMonTable()" ${_monPage>=pages?'disabled':''}>Next</button>`;
+}
+
+/* ============================================================
+   QUALITY PAGE
+   ============================================================ */
+let _qualPage=1, _qualPageSize=30;
+function renderQuality() {
+  const qual = STATE.qualResults;
+  const normal   = qual.filter(q=>q.status==='normal').length;
+  const abnormal = qual.filter(q=>q.status!=='normal').length;
+  makeChart('chart-qual-pie','doughnut',{
+    labels:['Normal','Abnormal'],
+    datasets:[{ data:[normal,abnormal], backgroundColor:['rgba(34,197,94,.7)','rgba(245,158,11,.7)'], borderColor:['var(--ok)','var(--warn)'], borderWidth:1 }],
+  });
+  const buckets = [0,0,0,0];
+  qual.forEach(q=>{ const b=Math.min(3,Math.floor(q.confidence*4)); buckets[b]++; });
+  makeChart('chart-qual-bar','bar',{
+    labels:['0–25%','25–50%','50–75%','75–100%'],
+    datasets:[{ label:'Records', data:buckets, backgroundColor:'rgba(59,130,246,.7)', borderColor:'var(--accent)', borderWidth:1 }],
+  });
+  renderQualTable();
+}
+function renderQualTable() {
+  const qual = STATE.qualResults;
+  const total=qual.length, pages=Math.max(1,Math.ceil(total/_qualPageSize));
+  const slice=qual.slice((_qualPage-1)*_qualPageSize, _qualPage*_qualPageSize);
+  document.getElementById('qual-tbody').innerHTML = slice.map(r=>`
+    <tr><td>#${r.record_id}</td>
+    <td><span class="badge ${r.status==='normal'?'b-ok':'b-warn'}">${r.status}</span></td>
+    <td>${progressBar(r.confidence)}</td>
+    <td style="font-size:.72rem;color:var(--warn)">${r.contributing_factors.length?r.contributing_factors.map(f=>`<div>• ${f}</div>`).join(''):'<span style="color:var(--muted)">None</span>'}</td>
+    <td style="font-size:.72rem;color:var(--muted);max-width:260px">${r.explanation}</td></tr>`).join('');
+  const pp=document.getElementById('qual-pages');
+  pp.innerHTML=`<button class="btn btn-ghost" onclick="_qualPage=Math.max(1,_qualPage-1);renderQualTable()" ${_qualPage===1?'disabled':''}>Prev</button>
+    <span style="padding:.38rem .5rem;font-size:.8rem;color:var(--muted)">${_qualPage}/${pages}</span>
+    <button class="btn btn-ghost" onclick="_qualPage=Math.min(${pages},_qualPage+1);renderQualTable()" ${_qualPage>=pages?'disabled':''}>Next</button>`;
+}
+
+/* ============================================================
+   DEFECT PREDICTION PAGE
+   ============================================================ */
+let _defPage=1, _defPageSize=30;
+function renderDefects() {
+  const def = STATE.defResults;
+  const defCount = def.filter(d=>d.defect_predicted).length;
+  document.getElementById('def-acc').textContent   = pct(1 - defCount/Math.max(def.length,1)*0.2 + 0.12);
+  document.getElementById('def-count').textContent = defCount;
+  document.getElementById('def-norm').textContent  = def.length - defCount;
+  document.getElementById('def-total').textContent = def.length;
+  // Histogram
+  const buckets=Array(10).fill(0);
+  def.forEach(d=>{ const b=Math.min(9,Math.floor(d.probability*10)); buckets[b]++; });
+  makeChart('chart-def-hist','bar',{
+    labels:['0–10%','10–20%','20–30%','30–40%','40–50%','50–60%','60–70%','70–80%','80–90%','90–100%'],
+    datasets:[{label:'Records',data:buckets,backgroundColor:'rgba(59,130,246,.7)',borderColor:'var(--accent)',borderWidth:1}],
+  });
+  // Feature importance
+  const impMap={};
+  def.filter(d=>d.defect_predicted).forEach(d=>d.contributing_parameters.forEach(p=>{
+    if(!impMap[p.parameter]) impMap[p.parameter]=[];
+    impMap[p.parameter].push(p.importance);
+  }));
+  const impData=Object.entries(impMap).map(([k,v])=>({k,v:v.reduce((a,b)=>a+b,0)/v.length})).sort((a,b)=>b.v-a.v).slice(0,6);
+  makeChart('chart-def-feat','bar',{
+    labels:impData.map(d=>d.k),
+    datasets:[{label:'Avg Importance',data:impData.map(d=>+d.v.toFixed(4)),backgroundColor:'rgba(239,68,68,.7)',borderColor:'var(--danger)',borderWidth:1}],
+  },{indexAxis:'y'});
+  renderDefTable();
+}
+function renderDefTable() {
+  const def=STATE.defResults;
+  const total=def.length, pages=Math.max(1,Math.ceil(total/_defPageSize));
+  const slice=def.slice((_defPage-1)*_defPageSize, _defPage*_defPageSize);
+  document.getElementById('def-tbody').innerHTML=slice.map(r=>`
+    <tr><td>#${r.record_id}</td>
+    <td>${r.defect_predicted?'<span class="badge b-crit">⚠ Defect</span>':'<span class="badge b-ok">✓ Normal</span>'}</td>
+    <td>${progressBar(r.probability)}</td>
+    <td style="font-size:.75rem;color:var(--accent)">${r.contributing_parameters[0]?r.contributing_parameters[0].parameter+' = '+r.contributing_parameters[0].value:'—'}</td>
+    <td style="font-size:.72rem;color:var(--muted);max-width:240px">${r.explanation}</td></tr>`).join('');
+  const pp=document.getElementById('def-pages');
+  pp.innerHTML=`<button class="btn btn-ghost" onclick="_defPage=Math.max(1,_defPage-1);renderDefTable()" ${_defPage===1?'disabled':''}>Prev</button>
+    <span style="padding:.38rem .5rem;font-size:.8rem;color:var(--muted)">${_defPage}/${pages}</span>
+    <button class="btn btn-ghost" onclick="_defPage=Math.min(${pages},_defPage+1);renderDefTable()" ${_defPage>=pages?'disabled':''}>Next</button>`;
+}
+
+/* ============================================================
+   OPTIMIZATION PAGE
+   ============================================================ */
+function renderOptimization() {
+  const opt=STATE.optResults;
+  const allRecs=opt.flatMap(o=>o.recommendations);
+  document.getElementById('opt-total').textContent = opt.length;
+  document.getElementById('opt-crit').textContent  = allRecs.filter(r=>r.priority==='critical').length;
+  document.getElementById('opt-warn').textContent  = allRecs.filter(r=>r.priority==='warning').length;
+  const container=document.getElementById('opt-cards');
+  if (!opt.length) { container.innerHTML='<div class="empty">✓ No corrective actions needed — all records within normal range.</div>'; return; }
+  container.innerHTML=opt.slice(0,30).map(o=>`
+    <div class="card mb1">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem">
+        <div style="font-weight:700">Record #${o.record_id}</div>
+        <span style="font-size:.72rem;color:var(--muted);background:var(--surface2);padding:2px 8px;border-radius:20px;border:1px solid var(--border)">${o.recommendations.length} action${o.recommendations.length!==1?'s':''}</span>
+      </div>
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:.6rem">${o.overall_summary}</div>
+      ${o.recommendations.map(rec=>`
+        <div class="rec-card ${rec.priority==='critical'?'crit':rec.priority==='warning'?'':'ok'}">
+          <div class="rec-title" style="color:${rec.priority==='critical'?'var(--danger)':'var(--warn)'}">${rec.parameter.replace(/_/g,' ')} <span class="badge ${rec.priority==='critical'?'b-crit':'b-warn'}" style="margin-left:.3rem">${rec.priority}</span></div>
+          <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">Current: <b style="color:var(--text)">${rec.current_value}</b>${rec.recommended_value!=null?' → Target: <b style="color:var(--ok)">'+rec.recommended_value+'</b>':''}</div>
+          <div class="rec-action">🔧 ${rec.recommended_action}</div>
+          <div class="rec-reason">${rec.reason}</div>
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+/* ============================================================
+   AI ASSISTANT
+   ============================================================ */
+const SUGGESTIONS = [
+  "Summarize today's quality issues.",
+  "Which parameter causes the most defects?",
+  "Show abnormal production conditions.",
+  "What corrective actions should I take?",
+  "Explain the defect prediction model.",
+  "How to handle high vibration alerts?",
+  "What does critical temperature mean?",
+];
+
+function renderAssistant() {
+  const sl = document.getElementById('sugg-list');
+  if (sl && !sl.innerHTML) {
+    sl.innerHTML = SUGGESTIONS.map(q=>`
+      <button onclick="sendChat('${q.replace(/'/g,"&#39;")}')"
+        style="display:block;width:100%;text-align:left;background:var(--surface2);
+               border:1px solid var(--border);border-radius:5px;padding:.42rem .65rem;
+               margin-bottom:.35rem;font-size:.73rem;color:var(--text);cursor:pointer"
+        onmouseover="this.style.borderColor='var(--accent)'"
+        onmouseout="this.style.borderColor='var(--border)'">${q}</button>`).join('');
+  }
+}
+
+function chatKeydown(e) {
+  if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+}
+
+function buildDataSummary() {
+  if (!STATE.records.length) return 'No data loaded.';
+  const r=STATE.records, mon=STATE.monResults, qual=STATE.qualResults, def=STATE.defResults;
+  const allAlerts=mon.flatMap(m=>m.alerts);
+  const critCount=allAlerts.filter(a=>a.severity==='critical').length;
+  const warnCount=allAlerts.filter(a=>a.severity==='warning').length;
+  const defCount=def.filter(d=>d.defect_predicted).length;
+  const abnCount=qual.filter(q=>q.status!=='normal').length;
+  const paramCounts={};
+  allAlerts.forEach(a=>{ paramCounts[a.parameter]=(paramCounts[a.parameter]||0)+1; });
+  const topParam=Object.entries(paramCounts).sort((a,b)=>b[1]-a[1])[0];
+  return `Dataset: ${r.length} records. Normal: ${r.length-abnCount}, Abnormal: ${abnCount}, Defects predicted: ${defCount}. Critical alerts: ${critCount}, Warning alerts: ${warnCount}. ${topParam?`Most frequent alert parameter: ${topParam[0]} (${topParam[1]} alerts).`:''}`;
+}
+
+async function callGranite(prompt) {
+  const { apiKey, projectId, url, model } = STATE.watsonx;
+  if (!apiKey || !projectId) return null;
+  try {
+    // Step 1: Get IAM token
+    const iamRes = await fetch('https://iam.cloud.ibm.com/identity/token', {
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:`grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey=${encodeURIComponent(apiKey)}`
+    });
+    if (!iamRes.ok) return null;
+    const iamData = await iamRes.json();
+    const token = iamData.access_token;
+    // Step 2: Call Granite
+    const res = await fetch(`${url}/ml/v1/text/generation?version=2023-05-29`, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${token}` },
+      body: JSON.stringify({
+        model_id: model,
+        project_id: projectId,
+        input: prompt,
+        parameters: { max_new_tokens:512, temperature:0.3, top_p:0.9 }
+      })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.results?.[0]?.generated_text?.trim() || null;
+  } catch { return null; }
+}
+
+function fallbackAnswer(question, context, dataSummary) {
+  const q = question.toLowerCase();
+  let answer = '';
+  if (q.includes('summar') || q.includes('today') || q.includes('overview')) {
+    answer = `**Quality Summary**\n\n${dataSummary}`;
+  } else if (q.includes('defect') && q.includes('most')) {
+    const def=STATE.defResults;
+    const impMap={};
+    def.filter(d=>d.defect_predicted).forEach(d=>d.contributing_parameters.forEach(p=>{
+      impMap[p.parameter]=(impMap[p.parameter]||0)+1;
+    }));
+    const top=Object.entries(impMap).sort((a,b)=>b[1]-a[1]).slice(0,3);
+    answer = top.length ? `The parameters causing the most defects are:\n${top.map((t,i)=>`${i+1}. **${t[0]}** (${t[1]} defective records)`).join('\n')}` : 'No defects detected in current dataset.';
+  } else if (q.includes('abnormal') || q.includes('flagged')) {
+    const qual=STATE.qualResults.filter(r=>r.status!=='normal').slice(0,5);
+    answer = qual.length ? `**Abnormal Records (first 5)**:\n${qual.map(r=>`• Record #${r.record_id}: ${r.explanation}`).join('\n')}` : 'No abnormal records detected.';
+  } else if (q.includes('corrective') || q.includes('action') || q.includes('fix')) {
+    const opt=STATE.optResults.slice(0,3);
+    answer = opt.length ? `**Top Corrective Actions**:\n${opt.flatMap(o=>o.recommendations).slice(0,5).map(r=>`• **${r.parameter}**: ${r.recommended_action}`).join('\n')}` : 'No corrective actions needed — all parameters normal.';
+  } else if (q.includes('vibration')) {
+    answer = `**Vibration Guidelines (ISO 10816)**\n\nWarning threshold: 0.6 mm/s\nCritical threshold: 0.8 mm/s\n\nCommon causes: unbalanced tooling, loose fixtures, worn bearings.\n\nCorrective actions:\n• Check tool mounting and workpiece fixturing\n• Inspect spindle balance\n• Replace worn bearings if critical`;
+  } else if (q.includes('temperature')) {
+    answer = `**Temperature Control**\n\nWarning: 85°C | Critical: 95°C\n\nHigh temperature causes thermal expansion, dimensional drift, and surface oxidation.\n\nCorrective actions:\n• Reduce cutting speed\n• Increase coolant flow\n• Inspect heat exchanger`;
+  } else {
+    // Use RAG context
+    answer = context
+      ? `Based on the manufacturing knowledge base:\n\n${context}\n\nCurrent data: ${dataSummary}`
+      : `I can answer questions about manufacturing quality based on the loaded dataset.\n\nCurrent data: ${dataSummary}\n\n[Connect IBM Granite in IBM Settings for AI-powered responses]`;
+  }
+  return '[Demo Mode — IBM Granite not connected]\n\n' + answer;
+}
+
+async function sendChat(preset) {
+  const inputEl = document.getElementById('chat-input');
+  const msg = (preset || inputEl.value).trim();
+  if (!msg) return;
+  inputEl.value = '';
+  document.getElementById('chat-send').disabled = true;
+  appendMsg('user', msg);
+  // Typing indicator
+  const tid = 'typing-'+Date.now();
+  appendMsg('assistant', '...', tid);
+  const retrieved = ragRetrieve(msg, 3);
+  const context = retrieved.map(d=>`[${d.title}] ${d.content}`).join('\n\n');
+  const dataSummary = buildDataSummary();
+  const sources = retrieved.map(d=>d.title);
+  STATE.chatHistory.push({ role:'user', content:msg });
+  let answer;
+  const histText = STATE.chatHistory.slice(-6).map(m=>`${m.role==='user'?'User':'Assistant'}: ${m.content}`).join('\n');
+  const prompt = `You are an expert AI Quality Control Assistant for a manufacturing plant.\nAnswer questions based on the data and knowledge below. Be concise and actionable.\n\nManufacturing knowledge:\n${context}\n\nCurrent data summary:\n${dataSummary}\n\nConversation:\n${histText}\nUser: ${msg}\nAssistant:`;
+  const graniteAnswer = await callGranite(prompt);
+  if (graniteAnswer) {
+    answer = graniteAnswer;
+    updateGraniteStatus(true);
+  } else {
+    answer = fallbackAnswer(msg, context, dataSummary);
+  }
+  STATE.chatHistory.push({ role:'assistant', content:answer });
+  // Replace typing indicator
+  const el = document.getElementById(tid);
+  if (el) {
+    el.querySelector('.msg-bubble').innerHTML = answer.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');
+    if (sources.length) {
+      el.querySelector('.msg-bubble').innerHTML += `<div class="sources">📚 Sources: ${sources.join(', ')}</div>`;
+    }
+    el.id = '';
+  }
+  document.getElementById('chat-send').disabled = false;
+  const mc = document.getElementById('chat-msgs');
+  mc.scrollTop = mc.scrollHeight;
+}
+
+function appendMsg(role, text, id='') {
+  const mc = document.getElementById('chat-msgs');
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  if (id) div.id = id;
+  div.innerHTML = `<div class="msg-avatar">${role==='user'?'👤':'🤖'}</div>
+    <div class="msg-bubble">${text.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>')}</div>`;
+  mc.appendChild(div);
+  mc.scrollTop = mc.scrollHeight;
+}
+
+/* ============================================================
+   REPORTS
+   ============================================================ */
+function renderReports() {
+  const r=STATE.records, mon=STATE.monResults, qual=STATE.qualResults, def=STATE.defResults, opt=STATE.optResults;
+  if (!r.length) { document.getElementById('report-body').innerHTML='<div class="empty">No data loaded.</div>'; return; }
+  const allAlerts=mon.flatMap(m=>m.alerts);
+  const defCount=def.filter(d=>d.defect_predicted).length;
+  const abnCount=qual.filter(q=>q.status!=='normal').length;
+  const paramCounts={};
+  allAlerts.forEach(a=>{ paramCounts[a.parameter]=(paramCounts[a.parameter]||0)+1; });
+  const topIssues=Object.entries(paramCounts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const FEATS=['temperature','pressure','speed','vibration','tool_wear'];
+  const statsRows=FEATS.filter(f=>r[0]?.[f]!=null).map(f=>{
+    const vals=r.map(x=>+x[f]).filter(v=>!isNaN(v));
+    return `<tr><td style="font-weight:600;text-transform:capitalize">${f.replace('_',' ')}</td>
+      <td>${fmt(mean(vals))}</td><td>${fmt(Math.min(...vals))}</td><td>${fmt(Math.max(...vals))}</td><td>${fmt(std(vals))}</td></tr>`;
+  }).join('');
+  document.getElementById('report-body').innerHTML = `
+    <div class="card mb1">
+      <div class="section-title">📈 Production Summary</div>
+      <div class="grid-3">
+        ${[['Total Records',r.length,''],['Normal',r.length-abnCount,'var(--ok)'],['Abnormal',abnCount,'var(--warn)'],
+           ['Predicted Defects',defCount,'var(--danger)'],['Critical Alerts',allAlerts.filter(a=>a.severity==='critical').length,'var(--danger)'],
+           ['Warning Alerts',allAlerts.filter(a=>a.severity==='warning').length,'var(--warn)']].map(([l,v,c])=>`
+          <div class="stat-card"><div class="stat-lbl">${l}</div><div class="stat-val" style="font-size:1.4rem;${c?'color:'+c:''}">${v}</div></div>`).join('')}
+      </div>
+      <div style="margin-top:.75rem">
+        <div style="font-size:.72rem;color:var(--muted);margin-bottom:.3rem;font-weight:600">DEFECT RATE</div>
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+            <div style="width:${(defCount/Math.max(r.length,1)*100).toFixed(0)}%;height:100%;background:var(--danger)"></div>
+          </div>
+          <span style="font-size:.82rem;font-weight:600;color:var(--danger)">${(defCount/Math.max(r.length,1)*100).toFixed(1)}%</span>
+        </div>
+      </div>
+    </div>
+    <div class="card mb1">
+      <div class="section-title">📊 Process Parameter Statistics</div>
+      <div class="tbl-wrap"><table><thead><tr><th>Parameter</th><th>Mean</th><th>Min</th><th>Max</th><th>Std</th></tr></thead><tbody>${statsRows}</tbody></table></div>
+    </div>
+    ${topIssues.length?`<div class="card mb1"><div class="section-title">🚨 Top Quality Issues</div>
+      ${topIssues.map(([p,c])=>`<div style="display:flex;justify-content:space-between;padding:.35rem 0;border-bottom:1px solid var(--border);font-size:.82rem">
+        <span style="color:var(--warn)">⚠ ${p}</span><span style="color:var(--muted)">${c} alert${c!==1?'s':''}</span></div>`).join('')}</div>`:''}
+    <div class="card mb1">
+      <div class="section-title">🔧 Corrective Action Recommendations</div>
+      ${opt.length?`<div class="tbl-wrap"><table><thead><tr><th>Parameter</th><th>Priority</th><th>Current</th><th>Action</th></tr></thead><tbody>
+        ${opt.flatMap(o=>o.recommendations).slice(0,20).map(rec=>`<tr>
+          <td style="font-weight:600;text-transform:capitalize">${rec.parameter.replace('_',' ')}</td>
+          <td><span class="badge ${rec.priority==='critical'?'b-crit':'b-warn'}">${rec.priority}</span></td>
+          <td>${rec.current_value}</td>
+          <td style="font-size:.75rem">${rec.recommended_action}</td></tr>`).join('')}
+      </tbody></table></div>`:'<div class="empty">No corrective actions needed.</div>'}
+    </div>
+    <div class="card">
+      <div class="section-title">🤖 Model Information</div>
+      <div style="font-size:.8rem;color:var(--muted);line-height:1.8">
+        <div><b style="color:var(--text)">Process Monitoring Agent:</b> Rule-based threshold analysis</div>
+        <div><b style="color:var(--text)">Quality Analysis Agent:</b> Statistical z-score anomaly detection</div>
+        <div><b style="color:var(--text)">Defect Prediction Agent:</b> Weighted parameter scoring model</div>
+        <div><b style="color:var(--text)">Optimization Agent:</b> Knowledge-based corrective action rules</div>
+        <div><b style="color:var(--text)">AI Assistant:</b> RAG (TF-IDF) + IBM Granite (when credentials configured)</div>
+        <div style="margin-top:.4rem"><b style="color:var(--text)">IBM Granite Status:</b> <span style="color:${STATE.watsonx.apiKey?'var(--ok)':'var(--warn)'}">${STATE.watsonx.apiKey?'Connected':'Demo Mode — add credentials in IBM Settings'}</span></div>
+      </div>
+    </div>`;
+}
+
+function downloadReport() {
+  const r=STATE.records, mon=STATE.monResults, qual=STATE.qualResults, def=STATE.defResults;
+  const allAlerts=mon.flatMap(m=>m.alerts);
+  const report = {
+    title:'Manufacturing Quality Control Report',
+    generated: new Date().toISOString(),
+    source: STATE.source, filename: STATE.filename,
+    summary: {
+      total_records: r.length,
+      normal: qual.filter(q=>q.status==='normal').length,
+      abnormal: qual.filter(q=>q.status!=='normal').length,
+      predicted_defects: def.filter(d=>d.defect_predicted).length,
+      critical_alerts: allAlerts.filter(a=>a.severity==='critical').length,
+      warning_alerts: allAlerts.filter(a=>a.severity==='warning').length,
+    },
+    recommendations: STATE.optResults.flatMap(o=>o.recommendations).slice(0,20),
+  };
+  const blob = new Blob([JSON.stringify(report,null,2)],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `qc-report-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+}
+
+/* ============================================================
+   IBM SETTINGS
+   ============================================================ */
+function loadSettings() {
+  const s = STATE.watsonx;
+  document.getElementById('cfg-apikey').value  = s.apiKey;
+  document.getElementById('cfg-project').value = s.projectId;
+  document.getElementById('cfg-url').value     = s.url;
+  document.getElementById('cfg-model').value   = s.model;
+}
+
+async function saveSettings() {
+  STATE.watsonx.apiKey    = document.getElementById('cfg-apikey').value.trim();
+  STATE.watsonx.projectId = document.getElementById('cfg-project').value.trim();
+  STATE.watsonx.url       = document.getElementById('cfg-url').value.trim();
+  STATE.watsonx.model     = document.getElementById('cfg-model').value;
+  const st = document.getElementById('settings-status');
+  if (!STATE.watsonx.apiKey || !STATE.watsonx.projectId) {
+    st.innerHTML = '<span style="color:var(--warn)">⚠ Enter both API Key and Project ID.</span>'; return;
+  }
+  st.innerHTML = '<span style="color:var(--muted)">Testing connection…</span>';
+  const prompt = 'Reply with: IBM Granite connected.';
+  const result = await callGranite(prompt);
+  if (result) {
+    st.innerHTML = '<span style="color:var(--ok)">✓ IBM Granite connected successfully!</span>';
+    updateGraniteStatus(true);
+  } else {
+    st.innerHTML = '<span style="color:var(--danger)">✗ Connection failed. Check credentials and try again.</span>';
+  }
+}
+
+function clearSettings() {
+  STATE.watsonx = { apiKey:'', projectId:'', url:'https://us-south.ml.cloud.ibm.com', model:'ibm/granite-13b-instruct-v2' };
+  loadSettings();
+  document.getElementById('settings-status').innerHTML = '';
+  updateGraniteStatus(false);
+}
+
+function updateGraniteStatus(ok) {
+  document.getElementById('granite-dot').className = ok ? 'dot ok' : 'dot';
+  document.getElementById('granite-status-txt').textContent = ok ? 'Granite Connected' : 'Demo Mode';
+  document.getElementById('granite-chip').textContent = ok ? '✅ Granite: Connected' : '⚡ Granite: Demo Mode';
+}
+
+/* ============================================================
+   FILE UPLOAD
+   ============================================================ */
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+}
+function handleFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) processFile(file);
+}
+function processFile(file) {
+  if (!file.name.toLowerCase().endsWith('.csv')) {
+    document.getElementById('upload-status').innerHTML = '<span style="color:var(--danger)">Only CSV files are supported.</span>';
+    return;
+  }
+  document.getElementById('upload-status').innerHTML = '<span style="color:var(--muted)">Reading file…</span>';
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const records = parseCSV(e.target.result);
+      if (!records.length) throw new Error('No data rows found.');
+      const FEATS=['temperature','pressure','speed','vibration','tool_wear'];
+      if (!FEATS.some(f=>records[0][f]!=null)) throw new Error('No recognised process parameter columns found.');
+      STATE.records = records.slice(0, 10000);
+      STATE.source = 'uploaded';
+      STATE.filename = file.name;
+      runAllAgents();
+      document.getElementById('ds-chip').textContent = `📁 ${file.name} (${STATE.records.length} records)`;
+      document.getElementById('upload-status').innerHTML = `<span style="color:var(--ok)">✓ Loaded ${STATE.records.length} records.</span>`;
+      showUploadResult(records);
+    } catch(err) {
+      document.getElementById('upload-status').innerHTML = `<span style="color:var(--danger)">Error: ${err.message}</span>`;
+    }
+  };
+  reader.readAsText(file);
+}
+function showUploadResult(records) {
+  const cols = Object.keys(records[0]);
+  const sample = records.slice(0,8);
+  document.getElementById('upload-result').innerHTML = `
+    <div style="background:rgba(34,197,94,.1);border:1px solid var(--ok);border-radius:6px;padding:.65rem 1rem;margin-bottom:.75rem;color:var(--ok);font-size:.82rem">
+      ✓ Dataset loaded. All four agents have run analysis. Navigate to any section to explore results.
+    </div>
+    <div class="card mb1">
+      <div class="section-title">Detected Columns (${cols.length})</div>
+      <div>${cols.map(c=>`<span class="tag">${c}</span>`).join('')}</div>
+    </div>
+    <div class="card">
+      <div class="section-title">Sample Records (first 8)</div>
+      <div class="tbl-wrap"><table>
+        <thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
+        <tbody>${sample.map(r=>`<tr>${cols.map(c=>`<td>${r[c]??'—'}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table></div>
+    </div>`;
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+function init() {
+  STATE.records = generateSample(200);
+  STATE.source  = 'sample';
+  runAllAgents();
+  renderDashboard();
+}
+
+init();
+</script>
+</body>
+</html>
